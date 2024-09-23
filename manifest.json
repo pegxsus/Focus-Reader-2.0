@@ -1,0 +1,26 @@
+{
+    "manifest_version": 3,
+    "name": "Focus Reader",
+    "version": "1.0",
+    "description": "Enhance reading focus with dynamic highlighting and summarization.",
+    "permissions": ["activeTab", "storage", "scripting"],
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "assets/icon16X16.png",
+        "48": "assets/icon64X64.png",
+        "128": "assets/icon128X128.png"
+      }
+
+    },
+    "background": {
+      "service_worker": "background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["content.js"]
+      }
+    ]
+  }
+  
