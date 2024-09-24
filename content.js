@@ -1,83 +1,59 @@
-// 
-let speed = 300;  // Speed of the highlighting (in milliseconds)
+// content.js
+let currentHighlight = null;
 let isHighlighting = true;
-let currentWordIndex = 0;
-let words = [];
+let highlightSize = 'line';
+let highlightColor = '#FFFF00';
+let highlightOpacity = 0.3;
 
-// Function to split text content into words
-function extractTextNodes() {
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  const textNodes = [];
-  
-  while (node = walker.nextNode()) {
-    if (node.nodeValue.trim().length > 0) {
-      textNodes.push(node);
-    }
-  }
-  
-  return textNodes;
-}
+function updateHighlight() {
+  if (!isHighlighting) return;
 
-// Function to highlight word by word
-function highlightWordByWord() {
-  const textNodes = extractTextNodes();
-  
-  textNodes.forEach(node => {
-    let text = node.nodeValue.trim();
-    if (text.length > 0) {
-      const wordsArray = text.split(/\s+/);
-      words = words.concat(wordsArray);
+  const elements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6');
+  const viewportHeight = window.innerHeight;
+  let found = false;
+
+  elements.forEach(element => {
+    const rect = element.getBoundingClientRect();
+    if (rect.top >= 0 && rect.bottom <= viewportHeight && !found) {
+      if (currentHighlight) currentHighlight.style.backgroundColor = '';
+      element.style.backgroundColor = highlightColor;
+      element.style.opacity = highlightOpacity;
+      currentHighlight = element;
+      found = true;
+
+      // Calculate and send progress
+      const progress = Math.round((Array.from(elements).indexOf(element) + 1) / elements.length * 100);
+      chrome.runtime.sendMessage({action: "updateProgress", progress: progress});
     }
   });
-  
-  let highlightInterval = setInterval(() => {
-    if (!isHighlighting || currentWordIndex >= words.length) {
-      clearInterval(highlightInterval);
-      return;
-    }
-
-    const word = words[currentWordIndex];
-    highlightWord(word);
-    currentWordIndex++;
-  }, speed);
 }
 
-// Function to highlight the current word
-function highlightWord(word) {
-  const range = document.createRange();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-
-  let node;
-  while (node = walker.nextNode()) {
-    const index = node.nodeValue.indexOf(word);
-    
-    if (index !== -1) {
-      range.setStart(node, index);
-      range.setEnd(node, index + word.length);
-      
-      const highlightSpan = document.createElement('span');
-      highlightSpan.style.backgroundColor = '#FFFF00';  // Yellow highlight
-      highlightSpan.style.transition = 'background-color 0.5s ease';
-      range.surroundContents(highlightSpan);
-      break;
-    }
-  }
+function summarizeContent() {
+  const text = document.body.innerText;
+  const sentences = text.match(/[^\.!\?]+[\.!\?]+/g);
+  const summary = sentences.slice(0, 3).join(' '); // Simple summary: first 3 sentences
+  alert(`Summary:\n${summary}`);
 }
 
-// Listen for settings update from popup
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if (request.action === 'updateSpeed') {
-    speed = request.speed;
-  } else if (request.action === 'toggleHighlight') {
-    isHighlighting = !isHighlighting;
-    if (isHighlighting) {
-      highlightWordByWord();
+  if (request.action === "updateSettings") {
+    chrome.storage.sync.get(['highlightSize', 'highlightColor', 'highlightOpacity'], function(data) {
+      highlightSize = data.highlightSize;
+      highlightColor = data.highlightColor;
+      highlightOpacity = data.highlightOpacity;
+      updateHighlight();
+    });
+  } else if (request.action === "toggleHighlight") {
+    isHighlighting = request.state;
+    if (!isHighlighting && currentHighlight) {
+      currentHighlight.style.backgroundColor = '';
     }
+    if (isHighlighting) updateHighlight();
+  } else if (request.action === "summarize") {
+    summarizeContent();
   }
 });
 
-// Initialize the word-by-word highlighter when the page is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  highlightWordByWord();
-});
+window.addEventListener('scroll', updateHighlight);
+window.addEventListener('resize', updateHighlight);
+document.addEventListener('DOMContentLoaded', updateHighlight);
